@@ -1,4 +1,4 @@
-export default `/**
+let output = new TextEncoder().encode(`/**
  * @licstart The following is the entire license notice for the
  * JavaScript code in this page
  *
@@ -57459,4 +57459,38 @@ const pdfjsBuild = "23972e194";
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
 
-//# sourceMappingURL=pdf.worker.mjs.map`
+//# sourceMappingURL=pdf.worker.mjs.map`)
+const relativePathToOriginal = "pdf.worker.mjs"
+try {
+    if (relativePathToOriginal && globalThis?.Deno?.readFileSync instanceof Function) {
+        const { FileSystem } = await import("https://deno.land/x/quickr@0.6.72/main/file_system.js")
+        // equivlent to: import.meta.resolve(relativePathToOriginal)
+        // but more bundler-friendly
+        const path = `${FileSystem.thisFolder}/${relativePathToOriginal}`
+        const current = await Deno.readFile(path)
+        const original = output
+        output = current
+
+        // update the file whenever (no await)
+        const thisFile = FileSystem.thisFile // equivlent to: import.meta.filename, but more bundler-friendly
+        setTimeout(async () => {
+            try {
+                const changeOccured = !(current.length == original.length && current.every((value, index) => value == original[index]))
+                // update this file
+                if (changeOccured) {
+                    const { binaryify } = await import("https://deno.land/x/binaryify@2.5.5.0/binaryify_api.js")
+                    await binaryify({
+                        pathToBinary: path,
+                        pathToBinarified: thisFile,
+                        forceExportString: false,
+                    })
+                }
+            } catch (e) {
+            }
+        }, 0)
+    }
+} catch (e) {
+    
+}
+        
+export default output

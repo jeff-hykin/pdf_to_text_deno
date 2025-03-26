@@ -30,14 +30,14 @@ export class PdfToText {
             .map((each) => each.address)
             // first ip is usually 127.0.0.1 (localhost)
         this.abortController = new AbortController()
-        let addr
         while (this.port < 10000) {
             try {
-                addr = `${hostIp||hostIps[0]}:${this.port}`
+                this.addr = `${hostIp||hostIps[0]}:${this.port}`
                 this.abortController = new AbortController()
                 this.server = Deno.serve(
                     { signal: this.abortController.signal, port: this.port, hostname: hostIps[0], onListen: ()=>{}  },
-                    (req) => req?.url?.endsWith?.("/ping") ? new Response("pong") : new Response(stringForPdfExtractionHtml, { headers: { "Content-Type": "text/html" } }),
+                    // (req) => new Response(this.stringForPdfExtractionHtml, { headers: { "Content-Type": "text/html" } }),
+                    (req) => req?.url?.endsWith?.("/ping") ? new Response("pong") : new Response(this.stringForPdfExtractionHtml, { headers: { "Content-Type": "text/html" } }),
                 )
                 break
             } catch (error) {
@@ -53,7 +53,7 @@ export class PdfToText {
         this.serverRunningPromise = new Promise(async (resolve, reject)=>{
             while (1) {
                 try {
-                    const response = await (await fetch(`http://${addr}/ping`)).text()
+                    const response = await (await fetch(`http://${this.addr}/ping`)).text()
                     if (response == "pong") {
                         resolve()
                     }
@@ -61,31 +61,40 @@ export class PdfToText {
                 break
             }
         })
-        this.pagePromise = this.serverRunningPromise.then(()=>this.browserPromise.then((browser) => browser.newPage(`http://${this.addr}/`)))
+        this.pagePromise = Promise.resolve().then(()=>this.serverRunningPromise.then(()=>this.browserPromise.then((browser) => browser.newPage(`http://${this.addr}/`))))
     }
-
+    
     async convert(pdfData, {tryCap = 10,} = {}) {
         pdfData = pdfData || uint8ArrayForTestPdfPdf
-        const stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${uint8ArrayForTestPdfPdf}])`)
+        this.stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${uint8ArrayForTestPdfPdf}])`)
         const page = await this.pagePromise
         var value
         let tries = 0
         while (value == null) {
             tries++
-            value = await page.evaluate(() => document.body.innerHTML)
-            try {
-                value = JSON.parse(value)
-            } catch (error) {
-                this.shouldWarn && console.warn(`error when trying to parse value as json`, value)
+            value = await page.evaluate(() => {
+                return {
+                    value: JSON.parse(globalThis.pdfTextContents||'null'),
+                    error: globalThis.pdfError,
+                    promiseResoved: globalThis.promiseResoved,
+                }
+            })
+            if (value.error) {
+                throw new Error(value.error)
             }
-            if (tries > tryCap) {
-                this.shouldWarn && console.warn(`giving up, tried ${tryCap}`)
-                break
+            if (value.promiseResoved) {
+                return value.value
+            }
+            if (!value.promiseResoved) {
+                if (tries > tryCap) {
+                    throw Error(`giving up on getting data out of browser for pdfToText, tried ${tryCap} times`)
+                    break
+                }
             }
         }
         return value
     }
-
+    
     close() {
         this.abortController.abort()
         return this.server.finished
