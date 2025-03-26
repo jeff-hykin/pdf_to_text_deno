@@ -27,7 +27,7 @@ export async function pdfToText({ pdfData }) {
         .filter((each) => each.family == "IPv4")
         .map((each) => each.address)
     
-    // FIXME: this doesn't actually work, awaiting causes code to never move on 
+    // FIXME: this error handling/loop doesn't actually work, awaiting causes code to never move on, not awaiting means port errors don't get caught
     
     // first ip is usually 127.0.0.1 (localhost)
     while (port < 10000) {
