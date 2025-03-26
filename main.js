@@ -9,7 +9,7 @@ import uint8ArrayForTestPdfPdf from "./test_data/test_pdf.pdf.binaryified.js"
 export async function pdfToText({ pdfData }) {
     pdfData = pdfData || uint8ArrayForTestPdfPdf
 
-    stringForIndexBundledHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${uint8ArrayForTestPdfPdf}])`)
+    const stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${uint8ArrayForTestPdfPdf}])`)
 
     // NOTE: I should be able to do it without a server, but for some reason astral doesn't work with a file://
     // import { pathToFileURL } from 'node:url'
@@ -22,11 +22,13 @@ export async function pdfToText({ pdfData }) {
     const browserPromise = launch()
     let server
     let addr
-    let port = 6060
+    let port = 6065
     const hostIps = Deno.networkInterfaces()
         .filter((each) => each.family == "IPv4")
         .map((each) => each.address)
-
+    
+    // FIXME: this doesn't actually work, awaiting causes code to never move on 
+    
     // first ip is usually 127.0.0.1 (localhost)
     while (port < 10000) {
         try {
@@ -49,8 +51,10 @@ export async function pdfToText({ pdfData }) {
     let tries = 0
     var tryCap = 10
     while (value == null) {
+        console.log(`evaling`)
         tries++
         value = await page.evaluate(() => document.body.innerHTML)
+        console.debug(`value is:`,value)
         try {
             value = JSON.parse(value)
         } catch (error) {
@@ -61,6 +65,6 @@ export async function pdfToText({ pdfData }) {
             break
         }
     }
-    await server.then((server) => server?.close())
+    server.then((server) => server?.close())
     return value
 }
