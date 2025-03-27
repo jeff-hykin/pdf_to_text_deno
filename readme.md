@@ -5,7 +5,7 @@ This is a deno module that uses [astral](https://github.com/astral-sh/astral) an
 ## How do I use this?
 
 ```js
-import { pdfToText, PdfToTextConverter } from "https://esm.sh/gh/jeff-hykin/pdf_to_text_deno@0.1.0.0/main.js"
+import { pdfToText, PdfToTextConverter } from "https://esm.sh/gh/jeff-hykin/pdf_to_text_deno@0.1.0.1/main.js"
  
 // if doing multiple conversions, use this:
 const converter = new PdfToTextConverter()
