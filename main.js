@@ -72,7 +72,7 @@ export class PdfToTextConverter {
             if (!(pdfData instanceof Uint8Array)) {
                 throw new Error(`pdfData must be a Uint8Array`)
             }
-            this.stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${uint8ArrayForTestPdfPdf}])`)
+            this.stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${pdfData}])`)
             const page = await this.pagePromise
             var value
             let tries = 0
