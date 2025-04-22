@@ -10,7 +10,7 @@ import { pdfToText, PdfToTextConverter } from "https://esm.sh/gh/jeff-hykin/pdf_
 // if doing multiple conversions, use this:
 const converter = new PdfToTextConverter()
 const result = await converter.convert(pdfData)
-await pdfToText.close() // clean up resouces
+await converter.close() // clean up resouces
 
 // if doing a one-off convert use this:
 const textObjects = await pdfToText(pdfData)
