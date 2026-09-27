@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-all
-import { launch } from "https://esm.sh/jsr/@astral/astral@0.5.2"
+// zip-js pinned: astral asks for ^2.7.52, and newer zip-js builds on esm.sh no longer export ZipReader
+import { launch } from "https://esm.sh/jsr/@astral/astral@0.5.2?deps=@jsr/zip-js__zip-js@2.7.52"
 import { FileSystem, glob } from "https://deno.land/x/quickr@0.7.6/main/file_system.js"
 import stringForIndexBundledHtml from "./main/index.bundled.html.binaryified.js"
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
@@ -51,34 +52,36 @@ export class PdfToTextConverter {
         if (this.port >= 10000) {
             throw new Error(`giving up, tried every port and couldn't start server`)
         }
-        this.serverRunningPromise = new Promise(async (resolve, reject)=>{
-            while (1) {
+        // retry until the server answers; a single failed ping used to leave this waiting forever
+        this.serverRunningPromise = (async ()=>{
+            for (let tries = 0; tries < 100; tries++) {
                 try {
                     const response = await (await fetch(`http://${this.addr}/ping`)).text()
                     if (response == "pong") {
-                        resolve()
+                        return
                     }
                 } catch (error) {}
-                break
+                await new Promise((resolve)=>setTimeout(resolve, 100))
             }
-        })
-        this.pagePromise = Promise.resolve().then(()=>this.serverRunningPromise.then(()=>this.browserPromise.then((browser) => browser.newPage(`http://${this.addr}/`))))
+            throw new Error(`the local server at ${this.addr} never answered`)
+        })()
+        this.pagePromise = Promise.resolve().then(()=>this.serverRunningPromise.then(()=>this.browserPromise.then((browser) => browser.newPage())))
     }
     
-    async convert(pdfData, {tryCap = 10,} = {}) {
-        await this.runningConversion // wait for previous conversion to finish (otherwise we'll have problems)
-                                     // NOTE: if converting a ton of pdfs, this could definitely be optimized better to run them in parallel
+    async convert(pdfData, {tryCap = 10, timeoutMs = 60_000} = {}) {
+        await this.runningConversion.catch(()=>{}) // one conversion at a time: they share the page
         return this.runningConversion = ((async ()=>{
             if (!(pdfData instanceof Uint8Array)) {
                 throw new Error(`pdfData must be a Uint8Array`)
             }
             this.stringForPdfExtractionHtml = stringForIndexBundledHtml.replace(/PDF_UINT8_ARRAY_\$8539084 = new Uint8Array\(\[\]\)/, `PDF_UINT8_ARRAY_$8539084 = new Uint8Array([${pdfData}])`)
+            // (re)load the page so it picks up this PDF; reusing the page as-is returns the previous result
             const page = await this.pagePromise
-            var value
-            let tries = 0
-            while (value == null) {
-                tries++
-                value = await page.evaluate(() => {
+            this.conversionCount = (this.conversionCount||0) + 1
+            await page.goto(`http://${this.addr}/?conversion=${this.conversionCount}`)
+            const deadline = Date.now() + timeoutMs
+            while (Date.now() < deadline) {
+                const value = await page.evaluate(() => {
                     return {
                         value: JSON.parse(globalThis.pdfTextContents||'null'),
                         error: globalThis.pdfError,
@@ -91,26 +94,23 @@ export class PdfToTextConverter {
                 if (value.promiseResoved) {
                     return value.value
                 }
-                if (!value.promiseResoved) {
-                    if (tries > tryCap) {
-                        throw Error(`giving up on getting data out of browser for pdfToText, tried ${tryCap} times`)
-                        break
-                    }
-                }
+                await new Promise((resolve)=>setTimeout(resolve, 100))
             }
-            return value
+            throw Error(`giving up on getting data out of browser for pdfToText after ${timeoutMs}ms`)
         })())
     }
     
-    close() {
+    async close() {
         this.abortController.abort()
+        // the browser is a separate process and outlives this one unless closed
+        await (await this.browserPromise).close().catch(()=>{})
         return this.server.finished
     }
 }
 
-export async function pdfToText(pdfData, {tryCap = 10,} = {}) {
+export async function pdfToText(pdfData, {tryCap = 10, timeoutMs} = {}) {
     const pdfToText = new PdfToTextConverter()
-    const result = await pdfToText.convert(pdfData, {tryCap})
+    const result = await pdfToText.convert(pdfData, {tryCap, timeoutMs})
     await pdfToText.close()
     return result
 }
